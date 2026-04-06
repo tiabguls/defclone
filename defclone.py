@@ -9,6 +9,7 @@ import os
 import sys
 import time
 from datetime import datetime
+from pathlib import Path
 
 import requests
 
@@ -122,8 +123,7 @@ def main():
 
     # Load device IDs
     try:
-        with open(args.devices) as f:
-            device_ids = [ln.strip() for ln in f if ln.strip()]
+        device_ids = [ln.strip() for ln in Path(args.devices).read_text().splitlines() if ln.strip()]
     except OSError as e:
         print(f"Cannot read devices file: {e}", file=sys.stderr)
         sys.exit(1)
@@ -138,10 +138,10 @@ def main():
     session.headers.update({"Authorization": f"Bearer {token}"})
 
     # Prepare output directory
-    ts      = datetime.now().strftime("%Y%m%d-%H%M")
-    out_dir = os.path.join("output", ts)
-    os.makedirs(out_dir, exist_ok=True)
-    out_file = os.path.join(out_dir, f"{ts}-results.json")
+    ts       = datetime.now().strftime("%Y%m%d-%H%M")
+    out_dir  = Path("output") / ts
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_file = out_dir / f"{ts}-results.json"
 
     rate_limiter = RateLimiter()
     results = {}
@@ -152,7 +152,7 @@ def main():
             # Resolve Entra device ID -> Defender machine record
             machines = api_get_all(
                 session,
-                f"{API_BASE}/api/machines?$filter=aadDeviceId eq '{entra_id}'",
+                f"{API_BASE}/api/machines?$filter=aadDeviceId+eq+{entra_id}",
                 rate_limiter,
             )
             if not machines:
@@ -185,8 +185,7 @@ def main():
             print(f"  Error for device {entra_id}: {e}")
             continue
 
-    with open(out_file, "w") as f:
-        json.dump(results, f, indent=2)
+    out_file.write_text(json.dumps(results, indent=2))
 
     print(f"Done. Results written to {out_file}")
 
