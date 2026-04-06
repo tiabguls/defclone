@@ -66,7 +66,18 @@ def get_token(tenant_id, client_id, client_secret):
     if resp.status_code != 200:
         print(f"Authentication error: {resp.text}", file=sys.stderr)
         sys.exit(1)
-    return resp.json()["access_token"]
+    body = resp.json()
+    expires_at = time.time() + body["expires_in"] - 60  # 60s buffer
+    return body["access_token"], expires_at
+
+
+def refresh_token_if_needed(session, tenant_id, client_id, client_secret, expires_at):
+    if time.time() < expires_at:
+        return expires_at
+    print("Token expiring; refreshing ...")
+    token, expires_at = get_token(tenant_id, client_id, client_secret)
+    session.headers.update({"Authorization": f"Bearer {token}"})
+    return expires_at
 
 
 # ---------------------------------------------------------------------------
@@ -132,7 +143,7 @@ def main():
         print("Device list is empty.", file=sys.stderr)
         sys.exit(1)
 
-    token = get_token(tenant_id, client_id, client_secret)
+    token, expires_at = get_token(tenant_id, client_id, client_secret)
 
     session = requests.Session()
     session.headers.update({"Authorization": f"Bearer {token}"})
@@ -147,6 +158,7 @@ def main():
     results = {}
 
     for entra_id in device_ids:
+        expires_at = refresh_token_if_needed(session, tenant_id, client_id, client_secret, expires_at)
         print(f"Processing {entra_id} ...")
         try:
             # Resolve Entra device ID -> Defender machine record
