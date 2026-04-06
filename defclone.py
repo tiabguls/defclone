@@ -155,49 +155,58 @@ def main():
     out_file = out_dir / f"{ts}-results.json"
 
     rate_limiter = RateLimiter()
-    results = {}
+    first_entry = True
 
-    for entra_id in device_ids:
-        expires_at = refresh_token_if_needed(session, tenant_id, client_id, client_secret, expires_at)
-        print(f"Processing {entra_id} ...")
-        try:
-            # Resolve Entra device ID -> Defender machine record
-            machines = api_get_all(
-                session,
-                f"{API_BASE}/api/machines?$filter=aadDeviceId+eq+{entra_id}",
-                rate_limiter,
-            )
-            if not machines:
-                print(f"  No machine found for device ID: {entra_id}")
+    with out_file.open("w") as f:
+        f.write("{\n")
+
+        for entra_id in device_ids:
+            expires_at = refresh_token_if_needed(session, tenant_id, client_id, client_secret, expires_at)
+            print(f"Processing {entra_id} ...")
+            try:
+                # Resolve Entra device ID -> Defender machine record
+                machines = api_get_all(
+                    session,
+                    f"{API_BASE}/api/machines?$filter=aadDeviceId+eq+{entra_id}",
+                    rate_limiter,
+                )
+                if not machines:
+                    print(f"  No machine found for device ID: {entra_id}")
+                    continue
+                machine     = machines[0]
+                defender_id = machine["id"]
+
+                # Per-machine vulnerabilities
+                vulns = api_get_all(
+                    session,
+                    f"{API_BASE}/api/machines/{defender_id}/vulnerabilities",
+                    rate_limiter,
+                )
+
+                # Logon users
+                users = api_get_all(
+                    session,
+                    f"{API_BASE}/api/machines/{defender_id}/logonusers",
+                    rate_limiter,
+                )
+
+                if not first_entry:
+                    f.write(",\n")
+                first_entry = False
+
+                entry = {
+                    "machine":         machine,
+                    "vulnerabilities": vulns,
+                    "logonUsers":      users,
+                }
+                f.write(f"  {json.dumps(entra_id)}: {json.dumps(entry, indent=2)}")
+                f.flush()
+
+            except requests.HTTPError as e:
+                print(f"  Error for device {entra_id}: {e}")
                 continue
-            machine     = machines[0]
-            defender_id = machine["id"]
 
-            # Per-machine vulnerabilities
-            vulns = api_get_all(
-                session,
-                f"{API_BASE}/api/machines/{defender_id}/vulnerabilities",
-                rate_limiter,
-            )
-
-            # Logon users
-            users = api_get_all(
-                session,
-                f"{API_BASE}/api/machines/{defender_id}/logonusers",
-                rate_limiter,
-            )
-
-            results[entra_id] = {
-                "machine":         machine,
-                "vulnerabilities": vulns,
-                "logonUsers":      users,
-            }
-
-        except requests.HTTPError as e:
-            print(f"  Error for device {entra_id}: {e}")
-            continue
-
-    out_file.write_text(json.dumps(results, indent=2))
+        f.write("\n}")
 
     print(f"Done. Results written to {out_file}")
 
