@@ -8,7 +8,6 @@ import json
 import os
 import sys
 import time
-import urllib.parse
 from datetime import datetime
 
 import requests
@@ -151,11 +150,12 @@ def main():
         print(f"Processing {entra_id} ...")
         try:
             # Resolve Entra device ID -> Defender machine record
-            machines = api_get_all(
-                session,
-                f"{API_BASE}/api/machines?$filter=aadDeviceId eq '{urllib.parse.quote(entra_id)}'",
-                rate_limiter,
-            )
+            filter_url = requests.Request(
+                "GET",
+                f"{API_BASE}/api/machines",
+                params={"$filter": f"aadDeviceId eq '{entra_id}'"},
+            ).prepare().url
+            machines = api_get_all(session, filter_url, rate_limiter)
             if not machines:
                 print(f"  No machine found for device ID: {entra_id}")
                 continue
