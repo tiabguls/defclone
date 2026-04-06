@@ -154,7 +154,7 @@ def main():
             # Resolve Entra device ID -> Defender machine record
             # Build the filter manually — requests percent-encodes '$' in param keys,
             # which the OData API does not accept.
-            filter_val = urllib.parse.quote(f"aadDeviceId eq '{entra_id}'", safe="'")
+            filter_val = urllib.parse.quote(f"aadDeviceId eq '{entra_id}'", safe="' ")
             machines = api_get_all(
                 session,
                 f"{API_BASE}/api/machines?$filter={filter_val}",
